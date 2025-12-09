@@ -7,7 +7,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-def get_creds():
+def get_local_creds():
     """
     Gets the Google API credentials
     This function is only executed when running locally. It should never be needed when running on Agent Engine
@@ -18,6 +18,9 @@ def get_creds():
     # For local execution we create it here.
     SCOPES = [
         "https://www.googleapis.com/auth/calendar",
+        "https://www.googleapis.com/auth/userinfo.profile",
+        "https://www.googleapis.com/auth/userinfo.email",
+        "openid",
         "https://mail.google.com/",
     ]
 
@@ -40,19 +43,34 @@ def get_creds():
 
     return creds
 
-
-def get_service(tool_context: ToolContext):
+def get_creds(tool_context: ToolContext):
     """
-    Returns the Google Calendar and GMail service for API interaction
+    Returns the Credentials object for either Gemini Enterprise or Local Host execution
     """
     try:
         oauth_token = tool_context.state['julian-gregory-authorizer'] # make sure this is the same as in deploy_to_ge.py 
         creds = Credentials(token=oauth_token)
     except KeyError:  ## if the calendar auth doesn't exists, then we're on a local machine testing
-        creds = get_creds()
-    
+        creds = get_local_creds()
+
+    return creds
+
+def get_service(tool_context: ToolContext):
+    """
+    Returns the Google Calendar and GMail service for API interaction
+    """
+    creds = get_creds(tool_context)
     calendar_service = build("calendar", "v3", credentials=creds)
     gmail_service = build("gmail", "v1", credentials=creds)
 
     return calendar_service, gmail_service
 
+def get_user_info(tool_context: ToolContext)->dict:
+    """
+    Returns the user-info object that contains the email and userid of the user.
+    We infer the user from the token provided
+    """
+    creds = get_creds(tool_context)
+    user_info_service = build('oauth2','v2',credentials=creds)
+    user_info = user_info_service.userinfo().get().execute()
+    return user_info

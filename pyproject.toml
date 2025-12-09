@@ -17,3 +17,8 @@ pythonpath = "."
 filterwarnings = [
     "ignore::DeprecationWarning:google.adk.runners"
 ]
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.3.0",
+]

@@ -1,7 +1,7 @@
 from google.adk.agents import Agent
 from google.adk.apps.app import App
 from google.adk.tools.agent_tool import AgentTool
-from .tools import get_todays_events, set_weather
+from .tools import get_todays_events, decline_all_todays_events
 
 summary_agent = Agent(
     name="summary_agent",
@@ -35,15 +35,44 @@ Late last night an invite for quick huddle at 2pm today was booked into your cal
     tools=[get_todays_events],
 )
 
+cancel_todays_meeting_agent = Agent(
+    name="cancel_todays_events",
+    model="gemini-2.0-flash",
+    description=("An agent to cancel all meetings for today"),
+    instruction=(
+"""
+You are a calendar assistant that helps the user manage their calendar.
+
+You will cancel all events for the day, and report back to the user all events that were cancelled.
+
+Here's an example response:
+
+I have declined all the meetings below for today.
+
+Meetings:
+
+1. Meeting with Brad. 9-10pm, <link to meeting>
+2. Project ABC team huddle 10.30-11am, <link to meeting>
+3. Lunch with Randy, <link to meeting>
+4. .....
+"""
+    ),
+    tools=[decline_all_todays_events],
+
+)
 
 root_agent = Agent(
     name="julian_gregory_day",
     model="gemini-2.0-flash",
     description=("Julian is an agent that helps users with their Calendars"),
     instruction=(
-        "You are a helpful calendar agent. You help users organize their calendars using the tools and subagents at your disposal."
+        "You are a helpful calendar agent. You help users organize their calendars using the tools and subagents at your disposal." \
+        "If you call other agents, provide back the user the original answer from the agent."
     ),
-    tools=[AgentTool(agent=summary_agent)],
+    tools=[
+        AgentTool(agent=summary_agent),
+        AgentTool(agent=cancel_todays_meeting_agent)
+    ],
 )
 
 

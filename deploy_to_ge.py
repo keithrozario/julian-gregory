@@ -15,7 +15,10 @@ credentials_file = "credentials_web.json"
 deployment_metadata_file = "deployment_metadata.json"
 scopes = [
     "https://www.googleapis.com/auth/calendar",
-    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://mail.google.com",
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "openid",
 ]
 
 
