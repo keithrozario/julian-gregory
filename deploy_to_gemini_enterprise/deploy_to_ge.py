@@ -8,19 +8,11 @@ import requests
 import google.auth
 import google_auth_oauthlib.flow
 from google.auth.transport.requests import Request
+from julian_gregory.scopes import SCOPES, AUTHORIZER_NAME
 
-auth_id = "julian-gregory-authorizer"
 gemini_app_id = "agentspace-1759116549124_1759116549124"
-credentials_file = "credentials_web.json"
-deployment_metadata_file = "deployment_metadata.json"
-scopes = [
-    "https://www.googleapis.com/auth/calendar",
-    "https://mail.google.com",
-    "https://www.googleapis.com/auth/userinfo.profile",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "openid",
-]
-
+credentials_file = "./token_and_creds/credentials_web.json"
+deployment_metadata_file = "./deployment_metadata.json"
 
 with open(deployment_metadata_file, "r") as f:
     deployment_metadata = json.loads(f.read())
@@ -32,11 +24,11 @@ client_id = client_credentials["client_id"]
 client_secret = client_credentials["client_secret"]
 token_uri = client_credentials["token_uri"]
 project_id = client_credentials["project_id"]
-auth_name = f"projects/{project_id}/locations/global/authorizations/{auth_id}"
-authorizer_gcp_url = f"https://discoveryengine.googleapis.com/v1alpha/projects/{project_id}/locations/global/authorizations/{auth_id}"
+auth_name = f"projects/{project_id}/locations/global/authorizations/{AUTHORIZER_NAME}"
+authorizer_gcp_url = f"https://discoveryengine.googleapis.com/v1alpha/projects/{project_id}/locations/global/authorizations/{AUTHORIZER_NAME}"
 
 flow = google_auth_oauthlib.flow.Flow.from_client_secrets_file(
-    credentials_file, scopes=scopes
+    credentials_file, scopes=SCOPES
 )
 authorization_url, state = flow.authorization_url(
     access_type="offline",
@@ -60,9 +52,9 @@ data = {
         "authorizationUri": authorization_url,
         "tokenUri": token_uri,
     },
-    "displayName": auth_id,
+    "displayName": AUTHORIZER_NAME,
 }
-endpoint = f"https://discoveryengine.googleapis.com/v1alpha/projects/{project_id}/locations/global/authorizations?authorizationId={auth_id}"
+endpoint = f"https://discoveryengine.googleapis.com/v1alpha/projects/{project_id}/locations/global/authorizations?authorizationId={AUTHORIZER_NAME}"
 
 
 requests.delete(
@@ -74,7 +66,7 @@ if r.status_code == 200:
     print(r.text)
     auth_name_with_project_number = json.loads(r.text)["name"]
 else:
-    print(f"ERROR: failed to create {auth_id} in {project_id}")
+    print(f"ERROR: failed to create {AUTHORIZER_NAME} in {project_id}")
     raise Exception("Unable to create authorizer")
 
 
@@ -89,22 +81,11 @@ data = {
     "authorizationConfig": {"toolAuthorizations": [auth_name_with_project_number]},
 }
 
-try:
-    with open(".agents_deployed", "r") as agent_file:
-        agent_resource_url = json.loads(agent_file.read())["agent_resource_url"]
-    agent_endpoint_url = (
-        f"https://discoveryengine.googleapis.com/v1alpha/{agent_resource_url}"
-    )
-    r = requests.delete(url=agent_endpoint_url, headers=headers)
-except (FileNotFoundError, KeyError):
-    pass  # NO previous agents deployed
-
 r = requests.post(
     url=agent_registration_endpoint, data=json.dumps(data), headers=headers
 )
-agent_resource_url = json.loads(r.text)["name"]
-
-# Save agent url to allow us to delete it when we re-run this script (idempotency)
-with open(".agents_deployed", "w") as agent_file:
-    agent_file.write(json.dumps({"agent_resource_url": agent_resource_url}))
+try:
+    agent_resource_url = json.loads(r.text)["name"]
+except KeyError:
+    print(r.content)
 

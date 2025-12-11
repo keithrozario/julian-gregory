@@ -1,12 +1,3 @@
-import sys
-import os
-import asyncio
-
-# Ensure the project root is in sys.path so imports work
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
 import pytest
 import pytest_asyncio
 from google.adk.sessions import InMemorySessionService
@@ -40,19 +31,3 @@ async def test_decline_all_todays_events(tool_context_factory):
     # decline_all_todays_events is synchronous
     result = decline_all_todays_events(tool_context=auth_user_context)
     print(result)
-
-if __name__ == "__main__":
-    # When running directly, we invoke the function manually without pytest fixtures
-    async def main():
-        print("Initializing ToolContext...")
-        ctx = await create_tool_context()
-        print("Running decline_all_todays_events...")
-        try:
-            result = decline_all_todays_events(tool_context=ctx)
-            print("Result:", result)
-        except Exception as e:
-            print(f"Error occurred: {e}")
-            import traceback
-            traceback.print_exc()
-
-    asyncio.run(main())

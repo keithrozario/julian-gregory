@@ -6,6 +6,8 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from .scopes import SCOPES, AUTHORIZER_NAME
+
 
 def get_local_creds():
     """
@@ -13,29 +15,21 @@ def get_local_creds():
     This function is only executed when running locally. It should never be needed when running on Agent Engine
     There's a difference between Google CLoud auth tokens and GWS auth tokens, they're not interchangeable :(
     """
-
-    # SCOPES are set in the Authorizer of Gemini Enterprise, it's baked into the Auth URI setting.
-    # For local execution we create it here.
-    SCOPES = [
-        "https://www.googleapis.com/auth/calendar",
-        "https://www.googleapis.com/auth/userinfo.profile",
-        "https://www.googleapis.com/auth/userinfo.email",
-        "openid",
-        "https://mail.google.com/",
-    ]
+    token_path = "./token_and_creds/token.json"
+    local_credentials_json = "./token_and_creds/credentials_local.json"
 
     creds = False
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    if os.path.exists(token_path):
+        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
         # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
+            flow = InstalledAppFlow.from_client_secrets_file(local_credentials_json, SCOPES)
             creds = flow.run_local_server(port=0)
             # Save the credentials for the next run
-        with open("token.json", "w") as token:
+        with open(token_path, "w") as token:
             token.write(creds.to_json())
 
     if not creds:
@@ -48,22 +42,27 @@ def get_creds(tool_context: ToolContext):
     Returns the Credentials object for either Gemini Enterprise or Local Host execution
     """
     try:
-        oauth_token = tool_context.state['julian-gregory-authorizer'] # make sure this is the same as in deploy_to_ge.py 
+        oauth_token = tool_context.state[AUTHORIZER_NAME]
         creds = Credentials(token=oauth_token)
-    except KeyError:  ## if the calendar auth doesn't exists, then we're on a local machine testing
+    except KeyError:  ## if the AUTHORIZER doesn't exists, then we're on a local machine testing
         creds = get_local_creds()
 
     return creds
 
-def get_service(tool_context: ToolContext):
+def get_calendar_service(tool_context: ToolContext):
     """
-    Returns the Google Calendar and GMail service for API interaction
+    Returns the Google Calendar service for API interaction
     """
     creds = get_creds(tool_context)
-    calendar_service = build("calendar", "v3", credentials=creds)
-    gmail_service = build("gmail", "v1", credentials=creds)
+    return build("calendar", "v3", credentials=creds)
 
-    return calendar_service, gmail_service
+
+def get_gmail_service(tool_context: ToolContext):
+    """
+    Returns the Google Gmail service for API interaction
+    """
+    creds = get_creds(tool_context)
+    return build("gmail", "v1", credentials=creds)
 
 def get_user_info(tool_context: ToolContext)->dict:
     """
@@ -74,3 +73,4 @@ def get_user_info(tool_context: ToolContext)->dict:
     user_info_service = build('oauth2','v2',credentials=creds)
     user_info = user_info_service.userinfo().get().execute()
     return user_info
+

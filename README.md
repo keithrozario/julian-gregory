@@ -24,8 +24,6 @@ There is a batman villian called [Calendar Man](https://en.wikipedia.org/wiki/Ca
 
 I've finally figured out how to OAuth with a custom agent in ADK and Gemini Enterprise.
 
-The example in [`multi_tool_agent/agent.py`](multi_tool_agent/agent.py) can extract the right token from `tool_context.state['calendarauth']` and use to create and event in the user's Google Calendar.
-
 If you're inside Google, the doc with more info is [here](https://docs.google.com/document/d/1unBzB5Wuqry_WRABrcSnE2R38pBvHogiv_pvqj2rVkY/edit?tab=t.0)
 
 ## Next steps

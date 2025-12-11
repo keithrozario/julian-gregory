@@ -1,36 +1,44 @@
 from google.adk.tools.tool_context import ToolContext
 import datetime
 from zoneinfo import ZoneInfo
-from .helper_funcs import get_service, get_user_info
+from .helper_funcs import get_calendar_service, get_user_info
 
 
-def set_weather(city: str, weather: str, tool_context: ToolContext) -> dict:
+def _get_calendar_and_time_info(tool_context: ToolContext):
+    """Helper to get calendar service, timezone, and current time."""
+    calendar_service = get_calendar_service(tool_context)
+    time_zone_str = calendar_service.calendars().get(calendarId="primary").execute()['timeZone']
+    time_zone = ZoneInfo(time_zone_str)
+    now = datetime.datetime.now(time_zone)
+    return calendar_service, time_zone, now
+
+
+def get_upcoming_events(tool_context: ToolContext, time_delta_in_days: int=7) -> list[dict]:
     """
-    Sets a calendar entry for the weather.
+    Returns all events from now until time_delta_in_days into the future
+    Args:
+        time_delta_in_days: The number of days to look into the future
+    returns
+        events: List of Dicts of the events
     """
-
-    calendar_service, gmail_service = get_service(tool_context)
-    timezone = calendar_service.calendarList().get(calendarId="primary").execute()['timeZone']
-    event = {
-        "summary": "Weather Update",
-        "location": city,
-        "description": weather,
-        "start": {
-            "dateTime": "2025-12-05T09:00:00",
-            "timeZone": timezone
-
-        },
-        "end": {
-            "dateTime": "2025-12-05T17:00:00",
-            "timeZone": timezone
-        },
-    }
+    calendar_service, time_zone, now = _get_calendar_and_time_info(tool_context)
+    start_of_today = datetime.datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=time_zone)
+    end_time = start_of_today + datetime.timedelta(days=time_delta_in_days)
     
-    event = calendar_service.events().insert(calendarId="primary", body=event).execute()
-    return {
-        "status": "success",
-        "report": "All done"
-    }
+    time_min = now.isoformat()
+    time_max = end_time.isoformat()
+
+    events_result = calendar_service.events().list(
+        calendarId='primary',
+        timeMin=time_min,
+        timeMax=time_max,
+        singleEvents=True,
+        orderBy='startTime'
+    ).execute()
+
+    events = events_result.get("items", [])
+
+    return events
 
 
 def get_todays_events(tool_context: ToolContext) -> list[dict]:
@@ -42,19 +50,14 @@ def get_todays_events(tool_context: ToolContext) -> list[dict]:
         events: List of Dicts of the events
     """
 
-
-    calendar_service, _ = get_service(tool_context)
-    time_zone = calendar_service.calendars().get(calendarId="primary").execute()['timeZone']
-    today = datetime.datetime.now(ZoneInfo(time_zone))
-
-    start_of_today = datetime.datetime(today.year, today.month, today.day, 0, 0, 0, tzinfo=ZoneInfo(time_zone))
+    calendar_service, time_zone, now = _get_calendar_and_time_info(tool_context)
+    
+    start_of_today = datetime.datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=time_zone)
     start_of_tomorrow = start_of_today + datetime.timedelta(days=1)
-
-    # Format as RFC3339 timestamps
+    
     time_min = start_of_today.isoformat()
     time_max = start_of_tomorrow.isoformat()
 
-    # Call the Calendar API events.list method
     events_result = calendar_service.events().list(
         calendarId='primary',
         timeMin=time_min,
@@ -63,7 +66,7 @@ def get_todays_events(tool_context: ToolContext) -> list[dict]:
         orderBy='startTime'
     ).execute()
 
-    events = events_result['items']
+    events = events_result.get("items", [])
 
     return events
 
@@ -77,19 +80,14 @@ def get_weeks_events(tool_context: ToolContext) -> list[dict]:
         events: List of Dicts of the events
     """
 
+    calendar_service, time_zone, now = _get_calendar_and_time_info(tool_context)
 
-    calendar_service, _ = get_service(tool_context)
-    time_zone = calendar_service.calendars().get(calendarId="primary").execute()['timeZone']
-    today = datetime.datetime.now(ZoneInfo(time_zone))
-
-    start_of_today = datetime.datetime(today.year, today.month, today.day, 0, 0, 0, tzinfo=ZoneInfo(time_zone))
-
-    # Calculate the number of days until the next Sunday (where Sunday is weekday 6, Monday is 0)
-    days_until_this_sunday = 6 - today.weekday()
+    start_of_today = datetime.datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=time_zone)
+    days_until_end_of_week = 7 - now.weekday()
+    
     time_min = start_of_today.isoformat()
-    time_max = (start_of_today + datetime.timedelta(days=days_until_this_sunday)).isoformat()
+    time_max = (start_of_today + datetime.timedelta(days=days_until_end_of_week)).isoformat()
 
-    # Call the Calendar API events.list method
     events_result = calendar_service.events().list(
         calendarId='primary',
         timeMin=time_min,
@@ -98,62 +96,246 @@ def get_weeks_events(tool_context: ToolContext) -> list[dict]:
         orderBy='startTime'
     ).execute()
 
-    events = events_result.get('items', [])
+    events = events_result.get("items", [])
 
     return events
 
-def set_calendar_entry(location: str, summary: str, description: str, start_date_time: datetime.datetime, end_date_time: datetime.datetime,
+
+def find_free_slots(tool_context: ToolContext, slot_duration_minutes: int = 60, time_delta_in_days: int = 14, business_hours_start: int = 8, business_hours_end: int = 17) -> list[dict]:
+    """
+    Finds all free time slots of a given duration in the next specified number of days during business hours.
+    Business hours are Monday to Friday.
+    """
+    _, time_zone, now = _get_calendar_and_time_info(tool_context)
+    
+    events = get_upcoming_events(tool_context, time_delta_in_days=time_delta_in_days)
+    
+    def parse_datetime_from_event(event_time_dict):
+        dt_str = event_time_dict.get('dateTime')
+        if dt_str:
+            return datetime.datetime.fromisoformat(dt_str)
+        return None
+
+    busy_intervals = []
+    for event in events:
+        start = parse_datetime_from_event(event.get('start', {}))
+        end = parse_datetime_from_event(event.get('end', {}))
+        if start and end:
+            busy_intervals.append((start.astimezone(time_zone), end.astimezone(time_zone)))
+
+    # Sort intervals by start time
+    busy_intervals.sort()
+
+    # Merge overlapping intervals
+    # The result is a clean list of non-overlapping intervals representing all the busy periods.
+    if not busy_intervals:
+        merged_busy_intervals = []
+    else:
+        merged_busy_intervals = [busy_intervals[0]]
+        for current_start, current_end in busy_intervals[1:]:
+            last_start, last_end = merged_busy_intervals[-1]
+            if current_start < last_end:
+                merged_busy_intervals[-1] = (last_start, max(last_end, current_end))
+            else:
+                merged_busy_intervals.append((current_start, current_end))
+
+    free_slots = []
+    slot_duration = datetime.timedelta(minutes=slot_duration_minutes)
+    increment = datetime.timedelta(minutes=30) # Check for a new slot every 30 minutes
+    
+    start_date = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    for day_offset in range(time_delta_in_days):
+        current_day = start_date + datetime.timedelta(days=day_offset)
+
+        if current_day.weekday() >= 5:  # Skip weekends
+            continue
+        
+        day_start = current_day.replace(hour=business_hours_start, minute=0, second=0, microsecond=0)
+        day_end = current_day.replace(hour=business_hours_end, minute=0, second=0, microsecond=0)
+
+        potential_slot_start = day_start
+        while potential_slot_start + slot_duration <= day_end:
+            potential_slot_end = potential_slot_start + slot_duration
+            
+            is_overlapping = False
+            for busy_start, busy_end in merged_busy_intervals:
+                if max(potential_slot_start, busy_start) < min(potential_slot_end, busy_end):
+                    is_overlapping = True
+                    break
+            
+            if not is_overlapping:
+                free_slots.append({
+                    "start": potential_slot_start.isoformat(),
+                    "end": potential_slot_end.isoformat(),
+                })
+            
+            potential_slot_start += increment
+            
+    return free_slots
+
+
+def find_free_slots_for_multiple_users(tool_context: ToolContext, user_emails: list[str], slot_duration_minutes: int = 60, time_delta_in_days: int = 14, business_hours_start: int = 8, business_hours_end: int = 17) -> list[dict]:
+    """
+    Finds all free time slots of a given duration for multiple users in the next specified number of days during business hours.
+    Business hours are Monday to Friday.
+    """
+    calendar_service, time_zone, now = _get_calendar_and_time_info(tool_context)
+    
+    time_min = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    time_max = (now + datetime.timedelta(days=time_delta_in_days)).replace(hour=23, minute=59, second=59, microsecond=0).isoformat()
+
+    calendar_ids = [{"id": email} for email in user_emails]
+
+    freebusy_query = {
+        "timeMin": time_min,
+        "timeMax": time_max,
+        "items": calendar_ids
+    }
+
+    freebusy_result = calendar_service.freebusy().query(body=freebusy_query).execute()
+    
+    busy_intervals = []
+    for calendar_id, data in freebusy_result['calendars'].items():
+        for busy_period in data['busy']:
+            busy_intervals.append((
+                datetime.datetime.fromisoformat(busy_period['start']).astimezone(time_zone),
+                datetime.datetime.fromisoformat(busy_period['end']).astimezone(time_zone)
+            ))
+
+    # Sort intervals by start time
+    busy_intervals.sort()
+
+    # Merge overlapping intervals
+    if not busy_intervals:
+        merged_busy_intervals = []
+    else:
+        merged_busy_intervals = [busy_intervals[0]]
+        for current_start, current_end in busy_intervals[1:]:
+            last_start, last_end = merged_busy_intervals[-1]
+            if current_start < last_end:
+                merged_busy_intervals[-1] = (last_start, max(last_end, current_end))
+            else:
+                merged_busy_intervals.append((current_start, current_end))
+
+    free_slots = []
+    slot_duration = datetime.timedelta(minutes=slot_duration_minutes)
+    increment = datetime.timedelta(minutes=30) # Check for a new slot every 30 minutes
+    
+    start_date = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    for day_offset in range(time_delta_in_days):
+        current_day = start_date + datetime.timedelta(days=day_offset)
+
+        if current_day.weekday() >= 5:  # Skip weekends
+            continue
+        
+        day_start = current_day.replace(hour=business_hours_start, minute=0, second=0, microsecond=0, tzinfo=time_zone)
+        day_end = current_day.replace(hour=business_hours_end, minute=0, second=0, microsecond=0, tzinfo=time_zone)
+
+        potential_slot_start = day_start
+        while potential_slot_start + slot_duration <= day_end:
+            potential_slot_end = potential_slot_start + slot_duration
+            
+            is_overlapping = False
+            for busy_start, busy_end in merged_busy_intervals:
+                if max(potential_slot_start, busy_start) < min(potential_slot_end, busy_end):
+                    is_overlapping = True
+                    break
+            
+            if not is_overlapping:
+                free_slots.append({
+                    "start": potential_slot_start.isoformat(),
+                    "end": potential_slot_end.isoformat(),
+                })
+            
+            potential_slot_start += increment
+            
+    return free_slots
+
+
+def set_calendar_entry(location: str, summary: str, description: str, start_datetime_isoformat: str, end_datetime_isoformat: str,
                      tool_context: ToolContext) -> dict:
     """
-    Sets a calendar entry
+    Sets a calendar entry. The agents uses strings to call the function even when type hints suggest datetime objects.
+
+    So I set this to strings instead.
+    
+    Args: 
+        start_datetime_isoformat: The start time of the meeting
+        end_datetime_isoformat: The end time of the meeting
     """
 
-    calendar_service, gmail_service = get_service(tool_context)
-    timezone = calendar_service.calendarList().get(calendarId="primary").execute()['timeZone']
+    calendar_service, time_zone, _ = _get_calendar_and_time_info(tool_context)
+    time_zone_str = str(time_zone)
 
     event = {
         "summary": summary,
         "location": location,
         "description": description,
         "start": {
-            "dateTime": start_date_time.isoformat(),
-            "timeZone": timezone
+            "dateTime": start_datetime_isoformat,
+            "timeZone": time_zone_str
 
         },
         "end": {
-            "dateTime": end_date_time.isoformat(),
-            "timeZone": timezone
+            "dateTime": end_datetime_isoformat,
+            "timeZone": time_zone_str
         },
     }
     
     event = calendar_service.events().insert(calendarId="primary", body=event).execute()
-    return {
-        "status": "success",
-        "report": "All done"
-    }
+    # Return the created event object, which contains the ID, link, etc.
+    return event
 
 
 def decline_all_todays_events(tool_context: ToolContext):
     """
-    Declines or cancels all of todays events.
+    Declines all of todays events.
+    Sets the responseStatus to decline
     """
 
-
-    calendar_service, _ = get_service(tool_context)
+    calendar_service = get_calendar_service(tool_context)
     events = get_todays_events(tool_context)
     user_email = get_user_info(tool_context)['email']
+    declined_events = []
 
     for event in events:
-        try:
-            for attendee in event['attendees']:
-                if attendee['email'] == user_email:
-                    attendee['responseStatus'] = 'declined'
-                    attendee['comment'] = "declined by Julian"
-                calendar_service.events().patch(calendarId='primary', eventId=event['id'], body=event).execute()
-        except KeyError:
-            pass # events without attendees don't need to be declined
-    
-    events = get_todays_events(tool_context)
-    summarized_events = [{"Event Title": event['summary'], "start": event['start']['dateTime'], "end": event['end']['dateTime']} for event in events]
-                
-    return summarized_events
+        # Skip events without attendees or where the user is not an attendee
+        if 'attendees' not in event:
+            continue
+
+        user_as_attendee = next((att for att in event['attendees'] if att.get('email') == user_email), None)
+
+        # If the user is an attendee and their status is not already declined
+        if user_as_attendee and user_as_attendee.get('responseStatus') != 'declined':
+            user_as_attendee['responseStatus'] = 'declined'
+            user_as_attendee['comment'] = "Declined by Julian"
+            
+            # Patch the event with the updated attendee list once per event
+            calendar_service.events().patch(calendarId='primary', eventId=event['id'], body=event).execute()
+            declined_events.append({
+                "Event Title": event.get('summary', 'No Title'),
+                "start": event.get('start', {}).get('dateTime'),
+                "end": event.get('end', {}).get('dateTime')
+            })
+
+    return declined_events
+
+
+def add_attendees_to_event(tool_context: ToolContext, event_id: str, attendees: list[str]) -> dict:
+    """
+    Adds a list of attendees to an existing event.
+    """
+    calendar_service = get_calendar_service(tool_context)
+    event = calendar_service.events().get(calendarId='primary', eventId=event_id).execute()
+
+    if 'attendees' not in event:
+        event['attendees'] = []
+
+    for attendee_email in attendees:
+        event['attendees'].append({'email': attendee_email})
+
+    updated_event = calendar_service.events().patch(calendarId='primary', eventId=event['id'], body=event, sendUpdates='all').execute()
+
+    return updated_event
