@@ -2,7 +2,7 @@
 # both the local credential process in tools.get_creds()
 # and the deploy_to_ge script will referene this.
 
-AUTHORIZER_NAME = "julian-gregory-authorizer"
+AUTHORIZER_NAME = "julian-authorizer"
 SCOPES = [
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/userinfo.profile",

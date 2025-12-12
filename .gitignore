@@ -12,3 +12,6 @@ wheels/
 # JSON Credentials
 credentials*.json
 token.json
+
+# macos stuff
+.DS_Store

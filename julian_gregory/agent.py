@@ -11,9 +11,9 @@ summary_agent = Agent(
 """
 You are a helpful assistant that will summarize the days meetings for a user. 
 
-Look through the events for the day and provide a useful summary of:
+Look through the events for the day or week and provide a useful summary of:
 
-1. All meetings and events taking place today
+1. All meetings and events taking place todayor this week
 2. Any free slots and time that are in the calendar
 3. Any last minute meetings that were booked after 5pm yesterday should be flagged.
 
@@ -81,12 +81,38 @@ Meetings:
 """
     ),
     tools=[tools.decline_all_todays_events],
+)
 
+move_meeting_agent = Agent(
+    name="move_meeting_agent",
+    model="gemini-2.5-flash",
+    description=("An agent to help move a meeting from one time to another"),
+    instruction=(
+""" 
+You are a helpful assistant, and tasked to move a meeting from one time to another.
+
+Use the tools at your disposal to find a suitable time to move a meeting.
+
+1. First determine the actual event the user is asking for by looking at upcoming events
+2. Then determine the next available free slot in the timeline the user provided that is free for all attendees
+3. Ask the user which slot works best
+4. If the user is the organizer reschedule the event, move the event to the new time
+5. If the user is not the organizer, decline the event and propose the new time in a comment
+
+"""
+    ),
+    tools=[
+        tools.find_free_slots_for_multiple_users,
+        tools.get_upcoming_events,
+        tools.decline_event,
+        tools.reschedule_event,
+        tools.get_now,
+           ],
 )
 
 root_agent = Agent(
     name="julian_gregory_day",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     description=("Julian is an agent that helps users with their Calendars"),
     instruction=(
 """
@@ -98,8 +124,9 @@ You can also help arrange for meetings with multiple attendees. If a user asks t
 1. Check for free slots with the users
 2. Propose a maximum of 3 slots to the users and seek their confirmation
 3. Set a calendar entry for the user and add the attendees.
-"""
 
+Always check todays date, do not book meetings before now, or meetings more than 6 months into the future.
+"""
     ),
     tools=[
         AgentTool(agent=summary_agent),
@@ -108,7 +135,9 @@ You can also help arrange for meetings with multiple attendees. If a user asks t
         tools.set_calendar_entry,
         tools.add_attendees_to_event,
         tools.find_free_slots_for_multiple_users,
+        tools.get_now
     ],
+    sub_agents=[move_meeting_agent]
 )
 
 

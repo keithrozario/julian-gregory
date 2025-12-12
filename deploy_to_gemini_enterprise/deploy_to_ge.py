@@ -10,8 +10,14 @@ import google_auth_oauthlib.flow
 from google.auth.transport.requests import Request
 from julian_gregory.scopes import SCOPES, AUTHORIZER_NAME
 
+# My Agentspace installation in Argolis
 gemini_app_id = "agentspace-1759116549124_1759116549124"
 credentials_file = "./token_and_creds/credentials_web.json"
+
+# The Hackathon app id
+# gemini_app_id = "agents-at-work-hackathon-3"
+# credentials_file = "./token_and_creds/credentials_hackathon.json"
+
 deployment_metadata_file = "./deployment_metadata.json"
 
 with open(deployment_metadata_file, "r") as f:
@@ -19,7 +25,7 @@ with open(deployment_metadata_file, "r") as f:
 reasoningEngine = deployment_metadata["remote_agent_engine_id"]
 
 with open(credentials_file, "r") as credential_file:
-    client_credentials = json.loads(credential_file.read())["installed"]
+    client_credentials = json.loads(credential_file.read())["web"]
 client_id = client_credentials["client_id"]
 client_secret = client_credentials["client_secret"]
 token_uri = client_credentials["token_uri"]
@@ -88,4 +94,3 @@ try:
     agent_resource_url = json.loads(r.text)["name"]
 except KeyError:
     print(r.content)
-

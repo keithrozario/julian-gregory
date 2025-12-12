@@ -260,7 +260,7 @@ def set_calendar_entry(location: str, summary: str, description: str, start_date
     Sets a calendar entry. The agents uses strings to call the function even when type hints suggest datetime objects.
 
     So I set this to strings instead.
-    
+
     Args: 
         start_datetime_isoformat: The start time of the meeting
         end_datetime_isoformat: The end time of the meeting
@@ -295,7 +295,7 @@ def decline_all_todays_events(tool_context: ToolContext):
     Sets the responseStatus to decline
     """
 
-    calendar_service = get_calendar_service(tool_context)
+    calendar_service, _, _ = _get_calendar_and_time_info(tool_context)
     events = get_todays_events(tool_context)
     user_email = get_user_info(tool_context)['email']
     declined_events = []
@@ -327,7 +327,7 @@ def add_attendees_to_event(tool_context: ToolContext, event_id: str, attendees: 
     """
     Adds a list of attendees to an existing event.
     """
-    calendar_service = get_calendar_service(tool_context)
+    calendar_service, _, _ = _get_calendar_and_time_info(tool_context)
     event = calendar_service.events().get(calendarId='primary', eventId=event_id).execute()
 
     if 'attendees' not in event:
@@ -339,3 +339,49 @@ def add_attendees_to_event(tool_context: ToolContext, event_id: str, attendees: 
     updated_event = calendar_service.events().patch(calendarId='primary', eventId=event['id'], body=event, sendUpdates='all').execute()
 
     return updated_event
+
+def get_now(tool_context: ToolContext):
+    """
+    Returns the current time according to the timezone of the users primary calendar's timezone
+    """
+    _, _, now = _get_calendar_and_time_info(tool_context)
+    return now.isoformat()
+
+
+def reschedule_event(tool_context: ToolContext, event_id: str, new_start_datetime_isoformat: str, new_end_datetime_isoformat: str):
+    """
+    Receives and event id, and new time, and reschedules and event
+    Args:
+        event_id: Event id of the event to reschedule
+        new_start_datetime_isoformat: The new startime of the event
+        new_end_datetime_isoformat: The new endtime of the event
+    """
+
+    calendar_service, _, _ = _get_calendar_and_time_info(tool_context)
+    event = calendar_service.events().get(calendarId='primary', eventId=event_id).execute()
+    event['start']['dateTime'] = new_start_datetime_isoformat
+    event['end']['dateTime'] = new_end_datetime_isoformat
+    updated_event = calendar_service.events().patch(calendarId='primary', eventId=event['id'], body=event, sendUpdates='all').execute()
+
+    return updated_event
+
+
+def decline_event(tool_context: ToolContext, event_id: str, decline_comment: str="Declined by Julian"):
+    """
+    Declines an event with a message
+    
+    Args:
+        event_id: The Event id of the event to reschedule
+        decline_message: A message to decline
+    """
+    calendar_service, _, _ = _get_calendar_and_time_info(tool_context)
+    user_email = get_user_info(tool_context)['email']
+    event = calendar_service.events().get(calendarId='primary', eventId=event_id).execute()
+    user_as_attendee = next((att for att in event['attendees'] if att.get('email') == user_email), None)
+
+    if user_as_attendee:
+        user_as_attendee['responseStatus'] = 'declined'
+        user_as_attendee['comment'] = decline_comment
+        calendar_service.events().patch(calendarId='primary', eventId=event['id'], body=event).execute()
+
+    return event
