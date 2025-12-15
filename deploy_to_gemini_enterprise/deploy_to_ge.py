@@ -11,12 +11,12 @@ from google.auth.transport.requests import Request
 from julian_gregory.scopes import SCOPES, AUTHORIZER_NAME
 
 # My Agentspace installation in Argolis
-gemini_app_id = "agentspace-1759116549124_1759116549124"
-credentials_file = "./token_and_creds/credentials_web.json"
+# gemini_app_id = "agentspace-1759116549124_1759116549124"
+# credentials_file = "./token_and_creds/credentials_web.json"
 
 # The Hackathon app id
-# gemini_app_id = "agents-at-work-hackathon-3"
-# credentials_file = "./token_and_creds/credentials_hackathon.json"
+gemini_app_id = "agents-at-work-hackathon-3"
+credentials_file = "./token_and_creds/credentials_hackathon.json"
 
 deployment_metadata_file = "./deployment_metadata.json"
 
