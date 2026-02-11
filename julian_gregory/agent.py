@@ -1,11 +1,42 @@
 from google.adk.agents import Agent
 from google.adk.apps.app import App
 from google.adk.tools.agent_tool import AgentTool
+
+from functools import cached_property
+import os
+from google.adk.models import Gemini
+from google.genai import Client, types
+
 from . import tools
+
+class Gemini3(Gemini):
+
+    # https://github.com/google/adk-python/issues/3628#issuecomment-3595215761
+    
+    @cached_property
+    def api_client(self) -> Client:
+        """Provides the api client with explicit configuration.
+
+        Returns:
+        The api client initialized with specific location and http_options.
+        """
+        # Ensure project ID is retrieved, falling back to a placeholder or raising an error if needed.
+        project = os.getenv("GOOGLE_CLOUD_PROJECT", "xxxxx")
+        
+
+        return Client(
+            project=project,
+            location="global",
+            http_options=types.HttpOptions(
+                headers=self._tracking_headers(),
+                retry_options=self.retry_options,
+            )
+        )
+
 
 summary_agent = Agent(
     name="summary_agent",
-    model="gemini-2.5-flash",
+    model=Gemini3(model="gemini-3-pro-image-preview"),
     description=("An agent that provides a summary of the day's events"),
     instruction=(
 """
@@ -112,7 +143,7 @@ Use the tools at your disposal to find a suitable time to move a meeting.
 
 root_agent = Agent(
     name="julian_gregory_day",
-    model="gemini-2.5-flash",
+    model=Gemini3(model="gemini-3-pro-preview"),
     description=("Julian is an agent that helps users with their Calendars"),
     instruction=(
 """

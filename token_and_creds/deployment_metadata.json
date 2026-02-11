@@ -2,5 +2,6 @@
   "remote_agent_engine_id": "projects/663844947729/locations/us-central1/reasoningEngines/4240310572983255040",
   "deployment_target": "agent_engine",
   "is_a2a": false,
-  "deployment_timestamp": "2025-12-05T16:26:23.423293"
+  "deployment_timestamp": "2025-12-05T16:26:23.423293",
+  "auth_uri": "https://accounts.google.com/o/oauth2/v2/auth?client_id=663844947729-semmlpj2tcfqfghenie6oa62umvea638.apps.googleusercontent.com&&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.readonly&include_granted_scopes=true&response_type=code&access_type=offline&prompt=consent"
 }
